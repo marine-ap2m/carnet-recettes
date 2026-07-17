@@ -294,13 +294,21 @@ function parseIngredientLine(line){
     if(pq!==null){ q = pq; rest = m[2].trim(); }
   }
   var u = "";
-  var words = rest.split(/\s+/);
-  if(words.length>1){
-    for(var i=0;i<UNITS.length;i++){
-      if(UNITS[i].re.test(words[0])){
-        u = UNITS[i].u;
-        rest = words.slice(1).join(" ");
-        break;
+  /* « cuillère(s) à soupe / à café » en toutes lettres */
+  var sp = rest.match(/^cuill?[eè]res?\s+(?:à|a)\s+(soupe|caf[eé])\s+/i);
+  if(sp){
+    u = /^s/i.test(sp[1]) ? "c.à.s" : "c.à.c";
+    rest = rest.slice(sp[0].length);
+  }else{
+    var words = rest.split(/\s+/);
+    if(words.length>1){
+      var w0 = words[0].replace(/\./g,""); /* « c.à.s » → « càs » */
+      for(var i=0;i<UNITS.length;i++){
+        if(UNITS[i].re.test(words[0]) || UNITS[i].re.test(w0)){
+          u = UNITS[i].u;
+          rest = words.slice(1).join(" ");
+          break;
+        }
       }
     }
   }
@@ -660,6 +668,73 @@ function saveEdit(){
 }
 
 /* ================= Import Instagram ================= */
+/* Récupération automatique de la légende à partir du lien, via la page
+   d'intégration publique d'Instagram (…/embed/captioned/) lue au travers
+   de relais CORS gratuits. Instagram peut bloquer : repli manuel prévu. */
+function fetchWithTimeout(url, ms){
+  return new Promise(function(resolve, reject){
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var timer = setTimeout(function(){
+      if(ctrl) ctrl.abort();
+      reject(new Error("timeout"));
+    }, ms);
+    fetch(url, ctrl ? {signal:ctrl.signal} : {}).then(function(res){
+      clearTimeout(timer);
+      if(!res.ok) return reject(new Error("http "+res.status));
+      res.text().then(resolve, reject);
+    }, function(e){ clearTimeout(timer); reject(e); });
+  });
+}
+function decodeEntities(s){
+  var el = document.createElement("textarea");
+  el.innerHTML = s;
+  return el.value;
+}
+function extractCaption(html){
+  if(!html) return null;
+  if(html.indexOf('class="Caption"')>=0 || html.indexOf("class='Caption'")>=0){
+    try{
+      var doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/gi,"\n"), "text/html");
+      var cap = doc.querySelector(".Caption");
+      if(cap){
+        var rm = cap.querySelectorAll(".CaptionComments, .CaptionUsername");
+        for(var i=0;i<rm.length;i++) rm[i].parentNode.removeChild(rm[i]);
+        var txt = cap.textContent.replace(/\n{3,}/g,"\n\n").trim();
+        if(txt.length>10) return txt;
+      }
+    }catch(e){}
+  }
+  var m = html.match(/property="og:title"\s+content="([^"]+)"/) || html.match(/content="([^"]+)"\s+property="og:title"/);
+  if(m){
+    var t = decodeEntities(m[1]);
+    var q = t.match(/[:：]\s*[«"“]([\s\S]+)[»"”]\s*$/);
+    if(q && q[1].length>10) return q[1];
+  }
+  if(html.indexOf("<")<0 && html.length>40) return html; /* réponse texte (lecteur type jina) */
+  return null;
+}
+function fetchCaption(url){
+  var m = String(url).match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
+  if(!m) return Promise.resolve(null);
+  var embed = "https://www.instagram.com/p/"+m[1]+"/embed/captioned/";
+  var relays = [
+    "https://api.allorigins.win/raw?url="+encodeURIComponent(embed),
+    "https://corsproxy.io/?url="+encodeURIComponent(embed),
+    "https://r.jina.ai/"+embed
+  ];
+  var i = 0;
+  return new Promise(function(resolve){
+    function next(){
+      if(i>=relays.length) return resolve(null);
+      fetchWithTimeout(relays[i++], 9000).then(function(html){
+        var cap = extractCaption(html);
+        if(cap) resolve(cap); else next();
+      }, next);
+    }
+    next();
+  });
+}
+
 /* Reçoit un partage Android « Instagram → Partager → Mes Recettes » */
 function handleShareTarget(){
   try{
@@ -702,15 +777,35 @@ function setupImport(){
       toast("Colle à la main dans les champs (appui long → Coller)");
     }
   });
+  var parsing = false;
   $("impParse").addEventListener("click", function(){
+    if(parsing) return;
     var url = $("impUrl").value.trim();
     var caption = $("impCaption").value.trim();
     if(!caption && !url){ toast("Colle au moins le lien ou la légende"); return; }
-    var parsed = caption ? parseCaption(caption) : {title:"",ing:[],steps:[]};
-    parsed.url = url;
-    openEdit(null, parsed);
-    if(caption && parsed.ing.length) toast(parsed.ing.length+" ingrédients détectés — vérifie et enregistre");
-    else if(caption) toast("Légende lue — complète les ingrédients");
+    function analyse(cap){
+      var parsed = cap ? parseCaption(cap) : {title:"",ing:[],steps:[]};
+      parsed.url = url;
+      openEdit(null, parsed);
+      if(cap && parsed.ing.length) toast(parsed.ing.length+" ingrédients détectés — vérifie et enregistre");
+      else if(cap) toast("Légende lue — complète les ingrédients si besoin");
+    }
+    if(caption){ analyse(caption); return; }
+    /* lien seul : on tente d'aller chercher la légende sur Instagram */
+    parsing = true;
+    var btn = $("impParse");
+    btn.textContent = "Je cherche la recette…";
+    fetchCaption(url).then(function(cap){
+      parsing = false;
+      btn.textContent = "Analyser ✨";
+      if(cap){
+        $("impCaption").value = cap;
+        toast("Légende récupérée sur Instagram ✓");
+        analyse(cap);
+      }else{
+        toast("Instagram a bloqué la lecture 😕 Ouvre le post, copie sa légende et colle-la ici.");
+      }
+    });
   });
 }
 
