@@ -184,8 +184,29 @@ input,textarea{font:inherit; color:inherit;}
   -webkit-overflow-scrolling:touch;
 }
 .sheet.on{transform:translateY(0);}
-.grab{width:38px; height:4px; border-radius:2px; background:var(--line); margin:10px auto 0;}
-.sheet-body{padding:14px 22px calc(30px + env(safe-area-inset-bottom));}
+.sheet-head{
+  position:sticky; top:0; z-index:3; background:var(--paper);
+  padding:10px 0 6px; border-radius:22px 22px 0 0;
+}
+.grab{width:38px; height:4px; border-radius:2px; background:var(--line); margin:0 auto;}
+.sheet-close{
+  position:absolute; top:8px; right:12px; width:34px; height:34px; border-radius:50%;
+  background:var(--chip); color:var(--muted); font-size:15px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.sheet-body{padding:8px 22px calc(30px + env(safe-area-inset-bottom));}
+
+/* ---------- Nutrition ---------- */
+.nutri{display:grid; grid-template-columns:repeat(5,1fr); gap:8px;}
+.nbox{
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:10px 4px; text-align:center; display:flex; flex-direction:column; gap:3px;
+}
+.nbox b{font-size:16px; font-variant-numeric:tabular-nums;}
+.nbox span{font-size:9.5px; color:var(--muted); letter-spacing:.02em; line-height:1.2;}
+.nbox.main{background:var(--accent-soft); border-color:transparent;}
+.nbox.main b{color:var(--accent); font-size:18px;}
+.nutri-note{font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5;}
 
 .hero{
   border-radius:16px; height:150px; display:flex; align-items:center; justify-content:center;

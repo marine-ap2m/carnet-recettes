@@ -58,12 +58,12 @@
   <div class="overlay" id="overlay"></div>
 
   <section class="sheet" id="detailSheet" aria-label="Fiche recette">
-    <div class="grab"></div>
+    <div class="sheet-head"><div class="grab"></div><button class="sheet-close" aria-label="Fermer">✕</button></div>
     <div class="sheet-body" id="detailBody"></div>
   </section>
 
   <section class="sheet" id="importSheet" aria-label="Ajouter une recette">
-    <div class="grab"></div>
+    <div class="sheet-head"><div class="grab"></div><button class="sheet-close" aria-label="Fermer">✕</button></div>
     <div class="sheet-body">
       <h2 class="serif">Nouvelle recette</h2>
       <p class="hint">Sur Instagram : <strong>Partager → Copier le lien</strong>, puis colle-le ici. Colle aussi la légende du post (appui long sur le texte → copier) : les ingrédients et les étapes seront détectés automatiquement.</p>
@@ -81,7 +81,7 @@
   </section>
 
   <section class="sheet" id="editSheet" aria-label="Modifier la recette">
-    <div class="grab"></div>
+    <div class="sheet-head"><div class="grab"></div><button class="sheet-close" aria-label="Fermer">✕</button></div>
     <div class="sheet-body">
       <h2 class="serif" id="editTitle">Nouvelle recette</h2>
       <label class="field"><span>Titre *</span>
