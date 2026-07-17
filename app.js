@@ -726,17 +726,24 @@ function extractCaption(html){
       if(s && s.length>10) return s;
     }catch(e){}
   }
-  /* 3. Métadonnées de partage (og:description / og:title) : …: "LÉGENDE" */
-  var metas = [/property="og:description"\s+content="([^"]+)"/, /content="([^"]+)"\s+property="og:description"/,
-               /property="og:title"\s+content="([^"]+)"/, /content="([^"]+)"\s+property="og:title"/];
-  for(var k=0;k<metas.length;k++){
-    var m = html.match(metas[k]);
-    if(!m) continue;
-    var t = decodeEntities(m[1]);
+  /* 3. Métadonnées de partage : …: "LÉGENDE" (Instagram) ou légende brute (miroirs) */
+  var dm = html.match(/property="og:description"\s+content="([^"]+)"/) || html.match(/content="([^"]+)"\s+property="og:description"/);
+  if(dm){
+    var t = decodeEntities(dm[1]);
     var idx = t.search(/[:：]\s*[«"“]/);
     if(idx>=0){
       var q = t.slice(idx).replace(/^[:：]\s*[«"“]/,"").replace(/[»"”]\.?\s*$/,"");
       if(q.length>10) return q;
+    }
+    if(!/\b[\d,.\s]+\s*(likes?|j.aime|comments?|commentaires?|followers|abonn[eé]s)/i.test(t) && looksLikeCaption(t)) return t;
+  }
+  var tm = html.match(/property="og:title"\s+content="([^"]+)"/) || html.match(/content="([^"]+)"\s+property="og:title"/);
+  if(tm){
+    var tt = decodeEntities(tm[1]);
+    var ti = tt.search(/[:：]\s*[«"“]/);
+    if(ti>=0){
+      var qq = tt.slice(ti).replace(/^[:：]\s*[«"“]/,"").replace(/[»"”]\.?\s*$/,"");
+      if(qq.length>10) return qq;
     }
   }
   /* 4. Réponse texte d'un lecteur (type jina) : on nettoie le markdown */
@@ -765,10 +772,11 @@ function cleanMarkdown(t){
     }).join("\n")
     .replace(/\n{3,}/g,"\n\n").trim();
 }
-/* Une vraie légende contient du texte, pas des restes techniques */
+/* Une vraie légende contient du texte, pas des restes techniques ni
+   le texte de la page de connexion d'Instagram */
 function looksLikeCaption(t){
   if(!t) return false;
-  if(/blob:|<\/?html|Se connecter|Connectez-vous pour|Log in to/i.test(t)) return false;
+  if(/blob:|<\/?html|Se connecter|Connectez-vous|Log in to|Sign up|Create an account|Welcome back to Instagram|See everyday moments|close friends|amis proches|moments du quotidien|Créer un compte|Rejoins Instagram|Join Instagram/i.test(t)) return false;
   var letters = (t.match(/[a-zà-öø-ÿ]/gi)||[]).length;
   return letters >= 30;
 }
@@ -794,7 +802,8 @@ function fetchPost(url){
     rc: "https://www.instagram.com/reel/"+code+"/embed/captioned/",
     pc: "https://www.instagram.com/p/"+code+"/embed/captioned/",
     re: "https://www.instagram.com/reel/"+code+"/embed/",
-    mn: "https://www.instagram.com/p/"+code+"/"
+    mn: "https://www.instagram.com/p/"+code+"/",
+    im: "https://imginn.com/p/"+code+"/"
   };
   var relays = {
     ao: function(u){ return "https://api.allorigins.win/raw?url="+encodeURIComponent(u); },
@@ -805,7 +814,8 @@ function fetchPost(url){
   var attempts = [
     ["ao","rc"],["cp","rc"],
     ["ao","pc"],["ct","rc"],
-    ["ji","mn"],["cp","pc"],
+    ["ao","im"],["cp","im"],
+    ["ji","mn"],["ct","im"],
     ["ao","mn"],["ji","rc"]
   ];
   var diag = [];
