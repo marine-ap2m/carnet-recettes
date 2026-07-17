@@ -660,6 +660,22 @@ function saveEdit(){
 }
 
 /* ================= Import Instagram ================= */
+/* Reçoit un partage Android « Instagram → Partager → Mes Recettes » */
+function handleShareTarget(){
+  try{
+    var sp = new URLSearchParams(location.search);
+    var text = sp.get("text")||"", url = sp.get("url")||"", title = sp.get("title")||"";
+    if(!text && !url && !title) return;
+    history.replaceState(null, "", location.pathname);
+    var all = (title+"\n"+text+"\n"+url).trim();
+    var m = all.match(/https?:\/\/\S+/);
+    $("impUrl").value = m ? m[0] : "";
+    var caption = all.replace(/https?:\/\/\S+/g,"").trim();
+    $("impCaption").value = caption;
+    openSheet("importSheet");
+    if(m && !caption) toast("Lien reçu ✓ — copie aussi la légende du post pour extraire la recette");
+  }catch(e){}
+}
 function setupImport(){
   $("addBtn").addEventListener("click", function(){
     $("impUrl").value = ""; $("impCaption").value = "";
@@ -668,6 +684,23 @@ function setupImport(){
   $("impManual").addEventListener("click", function(){
     var url = $("impUrl").value.trim();
     openEdit(null, {url:url});
+  });
+  $("impPaste").addEventListener("click", function(){
+    if(navigator.clipboard && navigator.clipboard.readText){
+      navigator.clipboard.readText().then(function(t){
+        t = (t||"").trim();
+        if(!t){ toast("Rien dans le presse-papiers — copie d'abord la légende dans Instagram"); return; }
+        var m = t.match(/https?:\/\/\S+/);
+        if(m && !$("impUrl").value) $("impUrl").value = m[0];
+        var rest = t.replace(/https?:\/\/\S+/g,"").trim();
+        if(rest) $("impCaption").value = rest;
+        toast(rest ? "Collé ✓ — appuie sur Analyser ✨" : "Lien collé ✓ — copie aussi la légende pour extraire la recette");
+      }, function(){
+        toast("Autorise l'accès au presse-papiers, ou colle à la main dans les champs");
+      });
+    }else{
+      toast("Colle à la main dans les champs (appui long → Coller)");
+    }
   });
   $("impParse").addEventListener("click", function(){
     var url = $("impUrl").value.trim();
@@ -786,6 +819,7 @@ function setup(){
   setupSwipeClose();
 
   setupImport();
+  handleShareTarget();
 
   if(firstRun){
     setTimeout(function(){

@@ -66,12 +66,18 @@
     <div class="sheet-head"><div class="grab"></div><button class="sheet-close" aria-label="Fermer">✕</button></div>
     <div class="sheet-body">
       <h2 class="serif">Nouvelle recette</h2>
-      <p class="hint">Sur Instagram : <strong>Partager → Copier le lien</strong>, puis colle-le ici. Colle aussi la légende du post (appui long sur le texte → copier) : les ingrédients et les étapes seront détectés automatiquement.</p>
-      <label class="field"><span>Lien Instagram (optionnel)</span>
+      <p class="hint">La recette est dans la <strong>légende</strong> du post (Instagram ne laisse pas l'appli la lire à ta place). Le plus rapide :</p>
+      <ol class="guide">
+        <li>Dans Instagram : appui long sur la légende → <strong>Copier</strong></li>
+        <li>Reviens ici → bouton <strong>📋 Coller</strong></li>
+        <li><strong>Analyser ✨</strong> remplit tout : titre, ingrédients, étapes</li>
+      </ol>
+      <button class="btn paste" id="impPaste">📋 Coller ce que je viens de copier</button>
+      <label class="field"><span>Lien Instagram</span>
         <input id="impUrl" type="url" placeholder="https://www.instagram.com/reel/…">
       </label>
-      <label class="field"><span>Légende du post (optionnel)</span>
-        <textarea id="impCaption" rows="7" placeholder="Colle ici la légende : titre, ingrédients, étapes…"></textarea>
+      <label class="field"><span>Légende du post</span>
+        <textarea id="impCaption" rows="6" placeholder="Colle ici la légende : titre, ingrédients, étapes…"></textarea>
       </label>
       <div class="sheet-actions">
         <button class="btn ghost" id="impManual">Créer à la main</button>

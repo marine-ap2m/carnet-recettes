@@ -247,6 +247,9 @@ input,textarea{font:inherit; color:inherit;}
 .tagpick{display:flex; gap:8px; flex-wrap:wrap;}
 .tagpick .chip.on{background:var(--accent); color:var(--paper);}
 .hint{font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:10px;}
+.guide{margin:10px 0 4px 20px; font-size:13px; line-height:1.7; color:var(--ink);}
+.guide li{padding-left:4px;}
+.btn.paste{width:100%; margin-top:12px; background:var(--ig); color:#fff;}
 
 /* ---------- Toast ---------- */
 .toast{
