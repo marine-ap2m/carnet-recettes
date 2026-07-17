@@ -1,4 +1,4 @@
-# 🍝 Carnet — mes recettes Instagram
+# 🍝 Mes Recettes — mes recettes Instagram
 
 Une petite appli perso (PWA) pour sauvegarder ses recettes Instagram comme dans un livre de
 cuisine, et générer automatiquement la liste de courses des recettes sélectionnées.

@@ -1,6 +1,6 @@
 {
-  "name": "Carnet — mes recettes",
-  "short_name": "Carnet",
+  "name": "Mes Recettes",
+  "short_name": "Mes Recettes",
   "description": "Tes recettes Instagram rangées comme un livre, avec liste de courses automatique.",
   "lang": "fr",
   "start_url": "./",
