@@ -75,7 +75,8 @@ input,textarea{font:inherit; color:inherit;}
   display:flex; flex-direction:column; transition:transform .12s ease; cursor:pointer;
 }
 .rcard:active{transform:scale(.97);}
-.rcard .photo{height:108px; display:flex; align-items:center; justify-content:center; font-size:46px;}
+.rcard .photo{height:108px; display:flex; align-items:center; justify-content:center; font-size:46px; overflow:hidden;}
+.rcard .photo img{width:100%; height:100%; object-fit:cover; display:block;}
 .rcard .body{padding:10px 12px 12px; display:flex; flex-direction:column; gap:5px;}
 .rcard h3{font-size:15px; font-weight:600; line-height:1.25; text-wrap:balance;}
 .rcard .meta{font-size:11.5px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
@@ -210,8 +211,9 @@ input,textarea{font:inherit; color:inherit;}
 
 .hero{
   border-radius:16px; height:150px; display:flex; align-items:center; justify-content:center;
-  font-size:64px; margin-bottom:16px;
+  font-size:64px; margin-bottom:16px; overflow:hidden;
 }
+.hero img{width:100%; height:100%; object-fit:cover; display:block;}
 .sheet h2{font-size:25px; font-weight:600; line-height:1.2; text-wrap:balance;}
 .sheet .meta-row{display:flex; gap:14px; align-items:center; margin:10px 0 4px; font-size:13px; color:var(--muted); flex-wrap:wrap;}
 .stepper{display:flex; align-items:center; gap:14px; margin:16px 0 4px;}

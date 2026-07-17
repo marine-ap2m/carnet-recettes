@@ -130,7 +130,10 @@ var NUTRI = [
   {k:["mascarpone"], v:[420,4.5,4,4,44]},
   {k:["ricotta"], v:[160,9,4,4,12]},
   {k:["chevre"], v:[290,19,1,1,23]},
-  {k:["comte","gruyere","emmental","raclette","cheddar","fromage rape","fromage"], v:[400,27,0.5,0.5,32]},
+  {k:["halloumi"], v:[320,22,2,2,25]},
+  {k:["camembert","brie"], v:[300,20,0.5,0.5,24]},
+  {k:["roquefort","gorgonzola"], v:[370,20,2,2,32]},
+  {k:["comte","gruyere","emmental","raclette","cheddar","pecorino","cantal","reblochon","tomme","fromage rape","fromage"], v:[400,27,0.5,0.5,32]},
   {k:["yaourt","skyr"], u:125, v:[60,4,5,5,3]},
   {k:["tofu"], v:[120,12,2,0.5,7]},
   {k:["pois chiche"], boxG:265, v:[120,7,14,0.5,2.5]},
@@ -257,7 +260,7 @@ function computeNutrition(r){
 }
 
 /* ================= Détection vegan ================= */
-var ANIMAL = ["poulet","boeuf","porc","veau","agneau","canard","dinde","lardon","bacon","jambon","saucisse","chorizo","steak","viande","merguez","volaille","saumon","cabillaud","thon","crevette","poisson","truite","dorade","colin","lieu","moule","gambas","anchois","oeuf","lait","beurre","creme","fromage","parmesan","mozzarella","feta","chevre","comte","gruyere","emmental","mascarpone","ricotta","burrata","raclette","cheddar","yaourt","skyr","miel","mayonnaise","boudoir","gelatine"];
+var ANIMAL = ["poulet","boeuf","porc","veau","agneau","canard","dinde","lardon","bacon","jambon","saucisse","chorizo","steak","viande","merguez","volaille","saumon","cabillaud","thon","crevette","poisson","truite","dorade","colin","lieu","moule","gambas","anchois","oeuf","lait","beurre","creme","fromage","parmesan","mozzarella","feta","chevre","comte","gruyere","emmental","mascarpone","ricotta","burrata","raclette","cheddar","halloumi","camembert","brie","roquefort","gorgonzola","pecorino","cantal","reblochon","tomme","boursin","yaourt","skyr","miel","mayonnaise","boudoir","gelatine"];
 var VEGAN_OK = /(lait|creme|beurre|yaourt|fromage)\s*(de |d')?\s*(coco|amande|soja|avoine|riz|cajou|cacahuete|arachide|vegetal)/;
 function isVeganList(ings){
   if(!ings || !ings.length) return false;
@@ -403,8 +406,11 @@ function renderBook(){
     if(r.handle) meta.push('<span class="handle">'+esc(r.handle)+'</span>');
     if(r.time) meta.push('<span>'+r.time+' min</span>');
     if((r.tags||[]).indexOf("Vegan")>=0) meta.push('<span title="Vegan">🌱</span>');
+    var photo = r.img
+      ? '<div class="photo"><img src="'+r.img+'" alt="" loading="lazy"></div>'
+      : '<div class="photo" style="background:linear-gradient(135deg,'+r.grad[0]+','+r.grad[1]+');">'+esc(r.emoji||"🍽️")+'</div>';
     return '<article class="rcard'+(sel?" sel":"")+'" data-id="'+esc(r.id)+'" tabindex="0" role="button" aria-label="'+esc(r.title)+'">'
-      + '<div class="photo" style="background:linear-gradient(135deg,'+r.grad[0]+','+r.grad[1]+');">'+esc(r.emoji||"🍽️")+'</div>'
+      + photo
       + '<div class="body"><h3 class="serif">'+esc(r.title)+'</h3>'
       + '<div class="meta">'+meta.join("<span>·</span>")+'</div></div>'
       + '<button class="tick" data-sel="'+esc(r.id)+'" aria-label="Sélectionner pour la liste de courses">✓</button>'
@@ -546,7 +552,10 @@ function renderDetail(){
   if(r.handle) meta.push('<span class="handle">'+esc(r.handle)+'</span>');
   if(r.time) meta.push('<span>⏱ '+r.time+' min</span>');
   if(r.tags && r.tags.length) meta.push('<span>'+r.tags.join(" · ")+'</span>');
-  var html = '<div class="hero" style="background:linear-gradient(135deg,'+r.grad[0]+','+r.grad[1]+');">'+esc(r.emoji||"🍽️")+'</div>'
+  var hero = r.img
+    ? '<div class="hero"><img src="'+r.img+'" alt=""></div>'
+    : '<div class="hero" style="background:linear-gradient(135deg,'+r.grad[0]+','+r.grad[1]+');">'+esc(r.emoji||"🍽️")+'</div>';
+  var html = hero
     + '<h2 class="serif">'+esc(r.title)+'</h2>'
     + '<div class="meta-row">'+meta.join("")+'</div>'
     + '<div class="stepper"><span class="lab">Portions</span>'
@@ -648,6 +657,9 @@ function saveEdit(){
   if(isVeganList(ing) && tags.indexOf("Vegan")<0){ tags.push("Vegan"); veganAuto = true; }
   var existing = state.editId ? byId(state.editId) : null;
   var rec = existing || {id:newId(), grad:GRADS[recipes.length % GRADS.length]};
+  if(!existing && pendingImg){ rec.img = pendingImg; }
+  if(!existing && pendingUser && !handle){ handle = "@"+String(pendingUser).replace(/^@/,""); }
+  pendingImg = null; pendingUser = null;
   rec.title = title;
   rec.handle = handle;
   rec.url = $("edUrl").value.trim();
@@ -713,7 +725,19 @@ function extractCaption(html){
   if(html.indexOf("<")<0 && html.length>40) return html; /* réponse texte (lecteur type jina) */
   return null;
 }
-function fetchCaption(url){
+function extractImage(html){
+  var m = html.match(/class="EmbeddedMediaImage"[^>]*?src="([^"]+)"/) ||
+          html.match(/property="og:image"\s+content="([^"]+)"/) ||
+          html.match(/content="([^"]+)"\s+property="og:image"/);
+  return m ? decodeEntities(m[1]) : null;
+}
+function extractUser(html){
+  var m = html.match(/class="UsernameText"[^>]*>([^<]+)</) ||
+          html.match(/class="CaptionUsername"[^>]*>(?:\s*<[^>]+>)*\s*([^<\s]+)/);
+  return m ? m[1].trim() : null;
+}
+/* Récupère légende + photo + compte du post ; null si tout est bloqué */
+function fetchPost(url){
   var m = String(url).match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
   if(!m) return Promise.resolve(null);
   var embed = "https://www.instagram.com/p/"+m[1]+"/embed/captioned/";
@@ -728,10 +752,106 @@ function fetchCaption(url){
       if(i>=relays.length) return resolve(null);
       fetchWithTimeout(relays[i++], 9000).then(function(html){
         var cap = extractCaption(html);
-        if(cap) resolve(cap); else next();
+        if(cap) resolve({cap:cap, img:extractImage(html), user:extractUser(html)});
+        else next();
       }, next);
     }
     next();
+  });
+}
+/* Télécharge la photo du plat, réduite (~480 px) et stockée avec la recette */
+function fetchImageData(imgUrl){
+  if(!imgUrl) return Promise.resolve(null);
+  var relays = [
+    "https://images.weserv.nl/?w=480&url="+encodeURIComponent(imgUrl),
+    "https://api.allorigins.win/raw?url="+encodeURIComponent(imgUrl),
+    "https://corsproxy.io/?url="+encodeURIComponent(imgUrl)
+  ];
+  var i = 0;
+  return new Promise(function(resolve){
+    function next(){
+      if(i>=relays.length) return resolve(null);
+      var im = new Image();
+      var done = false;
+      var timer = setTimeout(function(){ if(!done){ done=true; next(); } }, 9000);
+      im.crossOrigin = "anonymous";
+      im.onload = function(){
+        if(done) return; done = true; clearTimeout(timer);
+        try{
+          var w = Math.min(480, im.naturalWidth);
+          var h = Math.round(im.naturalHeight * w / im.naturalWidth);
+          var c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          c.getContext("2d").drawImage(im, 0, 0, w, h);
+          resolve(c.toDataURL("image/jpeg", 0.72));
+        }catch(e){ next(); }
+      };
+      im.onerror = function(){ if(!done){ done=true; clearTimeout(timer); next(); } };
+      im.src = relays[i++];
+    }
+    next();
+  });
+}
+
+/* Import : analyse (et si possible enregistre) une recette.
+   auto=true (partage Android) : zéro clic si la lecture réussit. */
+var importBusy = false;
+var pendingImg = null, pendingUser = null;
+function autoSaveRecipe(parsed){
+  var tags = [];
+  if(isVeganList(parsed.ing)) tags.push("Vegan");
+  var rec = {
+    id: newId(), grad: GRADS[recipes.length % GRADS.length],
+    title: parsed.title, handle: pendingUser ? "@"+String(pendingUser).replace(/^@/,"") : "",
+    url: parsed.url || "", time: 0, serves: 4, emoji: "🍽️",
+    tags: tags, ing: parsed.ing, steps: parsed.steps, img: pendingImg || ""
+  };
+  pendingImg = null; pendingUser = null;
+  recipes.unshift(rec);
+  saveRecipes();
+  renderBook();
+  openDetail(rec.id); /* bascule directement de la fiche d'import à la fiche recette */
+  toast("« "+rec.title+" » ajoutée à ton livre ✓"+(tags.length ? " · 🌱 Vegan" : ""));
+}
+function runImport(auto){
+  if(importBusy) return;
+  var url = $("impUrl").value.trim();
+  var caption = $("impCaption").value.trim();
+  if(!caption && !url){ toast("Colle au moins le lien ou la légende"); return; }
+  function analyse(cap){
+    var parsed = cap ? parseCaption(cap) : {title:"",ing:[],steps:[]};
+    parsed.url = url;
+    if(auto && parsed.title && parsed.ing.length>=2){
+      autoSaveRecipe(parsed);
+      return;
+    }
+    openEdit(null, parsed);
+    if(cap && parsed.ing.length) toast(parsed.ing.length+" ingrédients détectés — vérifie et enregistre");
+    else if(cap) toast("Légende lue — complète les ingrédients si besoin");
+  }
+  if(caption && !auto){ analyse(caption); return; }
+  if(!url){ analyse(caption); return; }
+  /* lien : on va chercher légende + photo sur Instagram */
+  importBusy = true;
+  var btn = $("impParse");
+  btn.textContent = "Je cherche la recette…";
+  fetchPost(url).then(function(res){
+    if(!res){
+      importBusy = false;
+      btn.textContent = "Analyser ✨";
+      if(caption){ analyse(caption); return; }
+      openSheet("importSheet");
+      toast("Instagram a bloqué la lecture 😕 Copie la légende du post et colle-la ici.");
+      return;
+    }
+    $("impCaption").value = res.cap;
+    pendingUser = res.user;
+    fetchImageData(res.img).then(function(dataUrl){
+      importBusy = false;
+      btn.textContent = "Analyser ✨";
+      pendingImg = dataUrl;
+      analyse(res.cap);
+    });
   });
 }
 
@@ -748,7 +868,10 @@ function handleShareTarget(){
     var caption = all.replace(/https?:\/\/\S+/g,"").trim();
     $("impCaption").value = caption;
     openSheet("importSheet");
-    if(m && !caption) toast("Lien reçu ✓ — copie aussi la légende du post pour extraire la recette");
+    if(m){
+      toast("Je récupère la recette… ⏳");
+      setTimeout(function(){ runImport(true); }, 50);
+    }
   }catch(e){}
 }
 function setupImport(){
@@ -777,36 +900,7 @@ function setupImport(){
       toast("Colle à la main dans les champs (appui long → Coller)");
     }
   });
-  var parsing = false;
-  $("impParse").addEventListener("click", function(){
-    if(parsing) return;
-    var url = $("impUrl").value.trim();
-    var caption = $("impCaption").value.trim();
-    if(!caption && !url){ toast("Colle au moins le lien ou la légende"); return; }
-    function analyse(cap){
-      var parsed = cap ? parseCaption(cap) : {title:"",ing:[],steps:[]};
-      parsed.url = url;
-      openEdit(null, parsed);
-      if(cap && parsed.ing.length) toast(parsed.ing.length+" ingrédients détectés — vérifie et enregistre");
-      else if(cap) toast("Légende lue — complète les ingrédients si besoin");
-    }
-    if(caption){ analyse(caption); return; }
-    /* lien seul : on tente d'aller chercher la légende sur Instagram */
-    parsing = true;
-    var btn = $("impParse");
-    btn.textContent = "Je cherche la recette…";
-    fetchCaption(url).then(function(cap){
-      parsing = false;
-      btn.textContent = "Analyser ✨";
-      if(cap){
-        $("impCaption").value = cap;
-        toast("Légende récupérée sur Instagram ✓");
-        analyse(cap);
-      }else{
-        toast("Instagram a bloqué la lecture 😕 Ouvre le post, copie sa légende et colle-la ici.");
-      }
-    });
-  });
+  $("impParse").addEventListener("click", function(){ runImport(false); });
 }
 
 /* ================= Sheets, overlay, toast ================= */
