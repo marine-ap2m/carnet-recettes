@@ -113,6 +113,13 @@
       <label class="field"><span>Lien Instagram</span>
         <input id="edUrl" type="url" placeholder="https://www.instagram.com/reel/…">
       </label>
+      <div class="field"><span class="field-label">Photo du plat</span>
+        <div class="photo-row">
+          <div class="photo-preview" id="edPhotoPrev" hidden></div>
+          <button class="btn ghost" id="edPhotoBtn" type="button">📷 Choisir une photo</button>
+          <input id="edPhotoFile" type="file" accept="image/*" hidden>
+        </div>
+      </div>
       <div class="field"><span class="field-label">Catégories</span>
         <div class="tagpick" id="edTags"></div>
       </div>
@@ -128,6 +135,15 @@
       </div>
     </div>
   </section>
+
+  <!-- Écran d'attente du partage automatique -->
+  <div class="loader" id="loader" hidden>
+    <img src="icons/icon.svg" alt="" class="loader-icon">
+    <div class="loader-title serif">Je récupère ta recette…</div>
+    <div class="loader-bar"><div class="loader-fill"></div></div>
+    <div class="loader-step" id="loaderStep">Lecture du post Instagram…</div>
+    <button class="loader-cancel" id="loaderCancel">Annuler</button>
+  </div>
 
   <div class="toast" id="toast" role="status"></div>
 </div>

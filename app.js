@@ -671,7 +671,14 @@ function openEdit(id, prefill){
   });
   $("edIng").value = ingLines.join("\n");
   $("edSteps").value = (r ? r.steps : (prefill && prefill.steps) || []).join("\n");
+  editPhoto = undefined;
+  renderPhotoPrev(r && r.img ? r.img : (pendingImg || null));
   openSheet("editSheet");
+}
+function renderPhotoPrev(src){
+  var p = $("edPhotoPrev");
+  if(src){ p.hidden = false; p.innerHTML = '<img src="'+src+'" alt="">'; }
+  else{ p.hidden = true; p.innerHTML = ""; }
 }
 function saveEdit(){
   var title = $("edTitle").value.trim();
@@ -686,9 +693,10 @@ function saveEdit(){
   if(isVeganList(ing) && tags.indexOf("Vegan")<0){ tags.push("Vegan"); veganAuto = true; }
   var existing = state.editId ? byId(state.editId) : null;
   var rec = existing || {id:newId(), grad:GRADS[recipes.length % GRADS.length]};
-  if(!existing && pendingImg){ rec.img = pendingImg; }
+  if(editPhoto !== undefined){ rec.img = editPhoto; }
+  else if(!existing && pendingImg){ rec.img = pendingImg; }
   if(!existing && pendingUser && !handle){ handle = "@"+String(pendingUser).replace(/^@/,""); }
-  pendingImg = null; pendingUser = null;
+  pendingImg = null; pendingUser = null; editPhoto = undefined;
   rec.title = title;
   rec.handle = handle;
   rec.url = $("edUrl").value.trim();
@@ -902,6 +910,28 @@ function fetchPost(url){
     wave();
   });
 }
+function imageToJpeg(im){
+  var w = Math.min(480, im.naturalWidth || 480);
+  var h = Math.round((im.naturalHeight || w) * w / (im.naturalWidth || w));
+  var c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(im, 0, 0, w, h);
+  return c.toDataURL("image/jpeg", 0.72);
+}
+/* Photo choisie dans la galerie (ou capture d'écran), réduite pareil */
+function fileToJpeg(file){
+  return new Promise(function(resolve, reject){
+    var fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = function(){
+      var im = new Image();
+      im.onload = function(){ try{ resolve(imageToJpeg(im)); }catch(e){ reject(e); } };
+      im.onerror = reject;
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
 /* Télécharge la photo du plat, réduite (~480 px) et stockée avec la recette */
 function fetchImageData(imgUrl){
   if(!imgUrl) return Promise.resolve(null);
@@ -920,14 +950,7 @@ function fetchImageData(imgUrl){
       im.crossOrigin = "anonymous";
       im.onload = function(){
         if(done) return; done = true; clearTimeout(timer);
-        try{
-          var w = Math.min(480, im.naturalWidth);
-          var h = Math.round(im.naturalHeight * w / im.naturalWidth);
-          var c = document.createElement("canvas");
-          c.width = w; c.height = h;
-          c.getContext("2d").drawImage(im, 0, 0, w, h);
-          resolve(c.toDataURL("image/jpeg", 0.72));
-        }catch(e){ next(); }
+        try{ resolve(imageToJpeg(im)); }catch(e){ next(); }
       };
       im.onerror = function(){ if(!done){ done=true; clearTimeout(timer); next(); } };
       im.src = relays[i++];
@@ -940,6 +963,15 @@ function fetchImageData(imgUrl){
    auto=true (partage Android) : zéro clic si la lecture réussit. */
 var importBusy = false;
 var pendingImg = null, pendingUser = null;
+var loaderCancelled = false;
+var editPhoto; /* undefined = inchangée · chaîne = nouvelle photo choisie */
+function showLoader(step){
+  loaderCancelled = false;
+  $("loaderStep").textContent = step || "";
+  $("loader").hidden = false;
+}
+function setLoaderStep(step){ $("loaderStep").textContent = step; }
+function hideLoader(){ $("loader").hidden = true; }
 function autoSaveRecipe(parsed){
   var tags = [];
   if(isVeganList(parsed.ing)) tags.push("Vegan");
@@ -976,12 +1008,15 @@ function runImport(auto){
   if(!url){ analyse(caption); return; }
   /* lien : on va chercher légende + photo sur Instagram */
   importBusy = true;
+  if(auto){ closeSheets(); showLoader("Lecture du post Instagram…"); }
   var btn = $("impParse");
   btn.textContent = "Je cherche la recette…";
   fetchPost(url).then(function(res){
+    if(auto && loaderCancelled) { importBusy = false; btn.textContent = "Analyser ✨"; return; }
     if(!res || !res.cap){
       importBusy = false;
       btn.textContent = "Analyser ✨";
+      hideLoader();
       var d = $("impDiag");
       if(res && res.fail && res.fail.length){
         d.hidden = false;
@@ -992,13 +1027,16 @@ function runImport(auto){
       toast("Instagram a bloqué la lecture de ce post 😕 Colle sa légende ci-dessous.");
       return;
     }
+    if(auto) setLoaderStep("Recette trouvée ✓ · téléchargement de la photo…");
     $("impDiag").hidden = true;
     $("impCaption").value = res.cap;
     pendingUser = res.user;
     fetchImageData(res.img).then(function(dataUrl){
+      if(auto && loaderCancelled) { importBusy = false; btn.textContent = "Analyser ✨"; return; }
       importBusy = false;
       btn.textContent = "Analyser ✨";
       pendingImg = dataUrl;
+      hideLoader();
       analyse(res.cap);
     });
   });
@@ -1016,10 +1054,11 @@ function handleShareTarget(){
     $("impUrl").value = m ? m[0] : "";
     var caption = all.replace(/https?:\/\/\S+/g,"").trim();
     $("impCaption").value = caption;
-    openSheet("importSheet");
     if(m){
-      toast("Je récupère la recette… ⏳");
+      /* partage direct : pas de formulaire, juste la barre de progression */
       setTimeout(function(){ runImport(true); }, 50);
+    }else{
+      openSheet("importSheet");
     }
   }catch(e){}
 }
@@ -1153,6 +1192,22 @@ function setup(){
   });
   $("edSave").addEventListener("click", saveEdit);
   $("edCancel").addEventListener("click", closeSheets);
+  $("edPhotoBtn").addEventListener("click", function(){ $("edPhotoFile").click(); });
+  $("edPhotoFile").addEventListener("change", function(e){
+    var f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if(!f) return;
+    fileToJpeg(f).then(function(d){
+      editPhoto = d;
+      renderPhotoPrev(d);
+      toast("Photo ajoutée ✓");
+    }, function(){ toast("Impossible de lire cette image"); });
+  });
+  $("loaderCancel").addEventListener("click", function(){
+    loaderCancelled = true;
+    hideLoader();
+    openSheet("importSheet");
+  });
 
   $("overlay").addEventListener("click", function(){ closeSheets(); });
   document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSheets(); });
