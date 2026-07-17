@@ -726,6 +726,17 @@ function extractCaption(html){
       if(s && s.length>10) return s;
     }catch(e){}
   }
+  /* 2 bis. Légende complète sur les pages miroirs (div desc/description) */
+  if(/class="(desc|post-desc|description|media-caption|photo-description)"/.test(html)){
+    try{
+      var doc2 = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/gi,"\n"), "text/html");
+      var el = doc2.querySelector(".desc, .post-desc, .description, .media-caption, .photo-description");
+      if(el){
+        var t2 = el.textContent.replace(/\n{3,}/g,"\n\n").trim();
+        if(looksLikeCaption(t2)) return t2;
+      }
+    }catch(e){}
+  }
   /* 3. Métadonnées de partage : …: "LÉGENDE" (Instagram) ou légende brute (miroirs) */
   var dm = html.match(/property="og:description"\s+content="([^"]+)"/) || html.match(/content="([^"]+)"\s+property="og:description"/);
   if(dm){
@@ -819,10 +830,27 @@ function fetchPost(url){
     ["ao","mn"],["ji","rc"]
   ];
   var diag = [];
+  var backup = null; /* légende valide mais sans ingrédients (souvent tronquée) */
+  function stripUserPrefix(res){
+    var um = res.cap.match(/^@?([a-z0-9._]{2,30})\s*[:：]\s+/);
+    if(um && /[._\d]/.test(um[1])){
+      res.user = res.user || um[1];
+      res.cap = res.cap.slice(um[0].length);
+    }
+    return res;
+  }
   function tryOne(a){
     return fetchWithTimeout(relays[a[0]](targets[a[1]]), 6500).then(function(html){
       var cap = extractCaption(html);
-      if(cap && looksLikeCaption(cap)) return {cap:cap, img:extractImage(html), user:extractUser(html)};
+      if(cap && looksLikeCaption(cap)){
+        var res = stripUserPrefix({cap:cap, img:extractImage(html), user:extractUser(html)});
+        /* on ne s'arrête que si la légende contient des ingrédients ;
+           sinon on la garde en secours et on continue la cascade */
+        if(parseCaption(res.cap).ing.length>=2) return res;
+        if(!backup || res.cap.length>backup.cap.length) backup = res;
+        diag.push(a[0]+"·"+a[1]+":court("+cap.length+")");
+        return null;
+      }
       diag.push(a[0]+"·"+a[1]+":vide("+String(html||"").length+")");
       return null;
     }, function(e){
@@ -833,7 +861,7 @@ function fetchPost(url){
   return new Promise(function(resolve){
     var i = 0;
     function wave(){
-      if(i>=attempts.length) return resolve({fail:diag});
+      if(i>=attempts.length) return resolve(backup || {fail:diag});
       var pair = [tryOne(attempts[i])];
       if(i+1<attempts.length) pair.push(tryOne(attempts[i+1]));
       i += 2;
