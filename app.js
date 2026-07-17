@@ -739,14 +739,38 @@ function extractCaption(html){
       if(q.length>10) return q;
     }
   }
-  /* 4. Réponse texte d'un lecteur (type jina) */
+  /* 4. Réponse texte d'un lecteur (type jina) : on nettoie le markdown */
   var mc = html.indexOf("Markdown Content:");
   if(mc>=0){
-    var body = html.slice(mc+17).trim();
-    if(body.length>40) return body;
+    var body = cleanMarkdown(html.slice(mc+17));
+    if(looksLikeCaption(body)) return body;
   }
-  if(html.indexOf("<")<0 && html.length>40) return html;
+  if(html.indexOf("<")<0){
+    var raw = cleanMarkdown(html);
+    if(looksLikeCaption(raw)) return raw;
+  }
   return null;
+}
+/* Retire liens/images markdown et lignes techniques */
+function cleanMarkdown(t){
+  return String(t)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .split("\n").filter(function(l){
+      var s = l.trim();
+      return !/^(URL Source|Title|Published Time|Warning|Markdown Content)\s*:/.test(s) &&
+             !/blob:|^https?:\/\//.test(s) &&
+             !/^\[?(image|photo|video|vidéo)\s*\d*\]?$/i.test(s) &&
+             !/^(voir cette publication|a post shared by|une publication partagée|watch on instagram|see this post|plus de|more)/i.test(s);
+    }).join("\n")
+    .replace(/\n{3,}/g,"\n\n").trim();
+}
+/* Une vraie légende contient du texte, pas des restes techniques */
+function looksLikeCaption(t){
+  if(!t) return false;
+  if(/blob:|<\/?html|Se connecter|Connectez-vous pour|Log in to/i.test(t)) return false;
+  var letters = (t.match(/[a-zà-öø-ÿ]/gi)||[]).length;
+  return letters >= 30;
 }
 function extractImage(html){
   var m = html.match(/class="EmbeddedMediaImage"[^>]*?src="([^"]+)"/) ||
@@ -788,8 +812,8 @@ function fetchPost(url){
   function tryOne(a){
     return fetchWithTimeout(relays[a[0]](targets[a[1]]), 6500).then(function(html){
       var cap = extractCaption(html);
-      if(cap) return {cap:cap, img:extractImage(html), user:extractUser(html)};
-      diag.push(a[0]+"·"+a[1]+":vide");
+      if(cap && looksLikeCaption(cap)) return {cap:cap, img:extractImage(html), user:extractUser(html)};
+      diag.push(a[0]+"·"+a[1]+":vide("+String(html||"").length+")");
       return null;
     }, function(e){
       diag.push(a[0]+"·"+a[1]+":"+((e&&e.message)||"erreur"));
