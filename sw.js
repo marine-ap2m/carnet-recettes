@@ -1,5 +1,5 @@
 /* Carnet — service worker : l'appli fonctionne hors connexion */
-var CACHE = "carnet-v10";
+var CACHE = "carnet-v11";
 var ASSETS = [
   "./",
   "./index.html",

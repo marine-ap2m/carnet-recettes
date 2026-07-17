@@ -100,7 +100,7 @@ function guessRayon(name){
 }
 /* ================= Nutrition (par 100 g : kcal, protéines, glucides, dont sucres, lipides) ================= */
 function norm(s){
-  return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  return String(s).toLowerCase().replace(/œ/g,"oe").replace(/æ/g,"ae").normalize("NFD").replace(/[̀-ͯ]/g,"");
 }
 /* k: mots-clés (sans accents) · v: [kcal, prot, gluc, sucres, lip] pour 100 g · u: poids moyen d'une pièce en g · boxG: poids d'une boîte */
 var NUTRI = [
@@ -205,6 +205,8 @@ var NUTRI = [
   {k:["radis"], v:[16,0.7,2,1.9,0.1]},
   {k:["basilic","persil","coriandre","menthe","ciboulette","aneth","herbes"], v:[30,3,4,1,0.6]},
   {k:["curry","cumin","paprika","curcuma","cannelle","epice","ras el hanout","garam masala"], v:[300,12,40,3,14]},
+  {k:["levure"], v:[90,12,20,1,1]},
+  {k:["arome","extrait de vanille","vanille","fleur d'oranger"], v:[100,0,10,10,0]},
   {k:["bouillon","cube"], u:10, v:[200,15,25,10,5]},
   {k:["cafe"], v:[1,0.1,0,0,0]},
   {k:["vinaigre"], v:[20,0,1,1,0]},
@@ -295,7 +297,16 @@ function parseIngredientLine(line){
   if(m){
     var pq = parseQty(m[1]);
     if(pq!==null){ q = pq; rest = m[2].trim(); }
+  }else{
+    var wm = t.match(/^(une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze)\s+(.+)$/i);
+    if(wm){
+      var WORDS = {un:1,une:1,deux:2,trois:3,quatre:4,cinq:5,six:6,sept:7,huit:8,neuf:9,dix:10,douze:12};
+      q = WORDS[wm[1].toLowerCase()];
+      rest = wm[2].trim();
+    }
   }
+  /* une durée n'est pas un ingrédient (« 15/20 minutes à 180 degrés… ») */
+  if(/^(min(utes?)?|h(eures?)?|sec(ondes?)?|jours?|nuits?)\b/i.test(rest)) return null;
   var u = "";
   /* « cuillère(s) à soupe / à café » en toutes lettres */
   var sp = rest.match(/^cuill?[eè]res?\s+(?:à|a)\s+(soupe|caf[eé])\s+/i);
@@ -320,10 +331,25 @@ function parseIngredientLine(line){
   var name = rest.charAt(0).toUpperCase()+rest.slice(1);
   return {n:name, q:q, u:u, r:guessRayon(name)};
 }
+/* Temps de cuisson/préparation le plus long trouvé dans le texte (minutes) */
+function extractTime(text){
+  var best = 0, m;
+  var reH = /(\d{1,2})\s*h(?:eures?)?(?:\s*(\d{1,2}))?\b/gi;
+  while((m = reH.exec(text))){
+    var v = (+m[1])*60 + (+m[2]||0);
+    if(v>best && v<=720) best = v;
+  }
+  var reM = /(\d{1,3})(?:\s*[\/à\-]\s*(\d{1,3}))?\s*min/gi;
+  while((m = reM.exec(text))){
+    var v2 = Math.max(+m[1], +m[2]||0);
+    if(v2>best && v2<=720) best = v2;
+  }
+  return best;
+}
 /* Découpe une légende Instagram en titre / ingrédients / étapes */
 function parseCaption(text){
   var lines = text.split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
-  var out = {title:"", ing:[], steps:[]};
+  var out = {title:"", ing:[], steps:[], time:extractTime(text)};
   if(!lines.length) return out;
   var mode = "start";
   var qtyLine = /^[\s•·\-–—*✅✔️▪️◾️]*([\d.,½¼¾]|une? )/i;
@@ -339,6 +365,9 @@ function parseCaption(text){
     if(mode==="ing"){
       var ing = parseIngredientLine(l);
       if(ing) out.ing.push(ing);
+      else if(/min|heure|degr|°|four|cuisson|repos|frigo/i.test(l) && l.length>8){
+        out.steps.push(l.replace(/^[\s•·\-–—*]+/,"").trim());
+      }
       return;
     }
     if(mode==="steps"){
@@ -631,7 +660,7 @@ function openEdit(id, prefill){
   $("editTitle").textContent = r ? "Modifier la recette" : "Nouvelle recette";
   $("edTitle").value = r ? r.title : (prefill && prefill.title || "");
   $("edHandle").value = r ? (r.handle||"") : (prefill && prefill.handle || "");
-  $("edTime").value = r && r.time ? r.time : "";
+  $("edTime").value = r && r.time ? r.time : (prefill && prefill.time ? prefill.time : "");
   $("edServes").value = r ? (r.serves||4) : 4;
   $("edEmoji").value = r ? (r.emoji||"") : "";
   $("edUrl").value = r ? (r.url||"") : (prefill && prefill.url || "");
@@ -917,7 +946,7 @@ function autoSaveRecipe(parsed){
   var rec = {
     id: newId(), grad: GRADS[recipes.length % GRADS.length],
     title: parsed.title, handle: pendingUser ? "@"+String(pendingUser).replace(/^@/,"") : "",
-    url: parsed.url || "", time: 0, serves: 4, emoji: "🍽️",
+    url: parsed.url || "", time: parsed.time || 0, serves: 4, emoji: "🍽️",
     tags: tags, ing: parsed.ing, steps: parsed.steps, img: pendingImg || ""
   };
   pendingImg = null; pendingUser = null;
