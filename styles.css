@@ -252,6 +252,10 @@ input,textarea{font:inherit; color:inherit;}
 .guide{margin:10px 0 4px 20px; font-size:13px; line-height:1.7; color:var(--ink);}
 .guide li{padding-left:4px;}
 .btn.paste{width:100%; margin-top:12px; background:var(--ig); color:#fff;}
+.hint.diag{
+  background:var(--chip); border-radius:10px; padding:10px 12px; cursor:pointer;
+  font-variant-numeric:tabular-nums; word-break:break-word;
+}
 
 /* ---------- Toast ---------- */
 .toast{

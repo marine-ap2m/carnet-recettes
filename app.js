@@ -704,6 +704,7 @@ function decodeEntities(s){
 }
 function extractCaption(html){
   if(!html) return null;
+  /* 1. Bloc légende de la page d'intégration */
   if(html.indexOf('class="Caption"')>=0 || html.indexOf("class='Caption'")>=0){
     try{
       var doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/gi,"\n"), "text/html");
@@ -716,13 +717,35 @@ function extractCaption(html){
       }
     }catch(e){}
   }
-  var m = html.match(/property="og:title"\s+content="([^"]+)"/) || html.match(/content="([^"]+)"\s+property="og:title"/);
-  if(m){
-    var t = decodeEntities(m[1]);
-    var q = t.match(/[:：]\s*[«"“]([\s\S]+)[»"”]\s*$/);
-    if(q && q[1].length>10) return q[1];
+  /* 2. Légende dans le JSON interne de la page */
+  var j = html.match(/"edge_media_to_caption"[\s\S]{0,200}?"text"\s*:\s*"((?:[^"\\]|\\.){15,})"/) ||
+          html.match(/"caption"\s*:\s*"((?:[^"\\]|\\.){15,})"/);
+  if(j){
+    try{
+      var s = JSON.parse('"'+j[1]+'"');
+      if(s && s.length>10) return s;
+    }catch(e){}
   }
-  if(html.indexOf("<")<0 && html.length>40) return html; /* réponse texte (lecteur type jina) */
+  /* 3. Métadonnées de partage (og:description / og:title) : …: "LÉGENDE" */
+  var metas = [/property="og:description"\s+content="([^"]+)"/, /content="([^"]+)"\s+property="og:description"/,
+               /property="og:title"\s+content="([^"]+)"/, /content="([^"]+)"\s+property="og:title"/];
+  for(var k=0;k<metas.length;k++){
+    var m = html.match(metas[k]);
+    if(!m) continue;
+    var t = decodeEntities(m[1]);
+    var idx = t.search(/[:：]\s*[«"“]/);
+    if(idx>=0){
+      var q = t.slice(idx).replace(/^[:：]\s*[«"“]/,"").replace(/[»"”]\.?\s*$/,"");
+      if(q.length>10) return q;
+    }
+  }
+  /* 4. Réponse texte d'un lecteur (type jina) */
+  var mc = html.indexOf("Markdown Content:");
+  if(mc>=0){
+    var body = html.slice(mc+17).trim();
+    if(body.length>40) return body;
+  }
+  if(html.indexOf("<")<0 && html.length>40) return html;
   return null;
 }
 function extractImage(html){
@@ -736,27 +759,56 @@ function extractUser(html){
           html.match(/class="CaptionUsername"[^>]*>(?:\s*<[^>]+>)*\s*([^<\s]+)/);
   return m ? m[1].trim() : null;
 }
-/* Récupère légende + photo + compte du post ; null si tout est bloqué */
+/* Récupère légende + photo + compte du post.
+   Essaie plusieurs adresses d'intégration × plusieurs relais, deux par deux.
+   Résout {cap,img,user} ou {fail:[diagnostics]} si tout est bloqué. */
 function fetchPost(url){
   var m = String(url).match(/instagram\.com\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
-  if(!m) return Promise.resolve(null);
-  var embed = "https://www.instagram.com/p/"+m[1]+"/embed/captioned/";
-  var relays = [
-    "https://api.allorigins.win/raw?url="+encodeURIComponent(embed),
-    "https://corsproxy.io/?url="+encodeURIComponent(embed),
-    "https://r.jina.ai/"+embed
+  if(!m) return Promise.resolve({fail:["lien Instagram non reconnu"]});
+  var code = m[1];
+  var targets = {
+    rc: "https://www.instagram.com/reel/"+code+"/embed/captioned/",
+    pc: "https://www.instagram.com/p/"+code+"/embed/captioned/",
+    re: "https://www.instagram.com/reel/"+code+"/embed/",
+    mn: "https://www.instagram.com/p/"+code+"/"
+  };
+  var relays = {
+    ao: function(u){ return "https://api.allorigins.win/raw?url="+encodeURIComponent(u); },
+    cp: function(u){ return "https://corsproxy.io/?url="+encodeURIComponent(u); },
+    ct: function(u){ return "https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u); },
+    ji: function(u){ return "https://r.jina.ai/"+u; }
+  };
+  var attempts = [
+    ["ao","rc"],["cp","rc"],
+    ["ao","pc"],["ct","rc"],
+    ["ji","mn"],["cp","pc"],
+    ["ao","mn"],["ji","rc"]
   ];
-  var i = 0;
+  var diag = [];
+  function tryOne(a){
+    return fetchWithTimeout(relays[a[0]](targets[a[1]]), 6500).then(function(html){
+      var cap = extractCaption(html);
+      if(cap) return {cap:cap, img:extractImage(html), user:extractUser(html)};
+      diag.push(a[0]+"·"+a[1]+":vide");
+      return null;
+    }, function(e){
+      diag.push(a[0]+"·"+a[1]+":"+((e&&e.message)||"erreur"));
+      return null;
+    });
+  }
   return new Promise(function(resolve){
-    function next(){
-      if(i>=relays.length) return resolve(null);
-      fetchWithTimeout(relays[i++], 9000).then(function(html){
-        var cap = extractCaption(html);
-        if(cap) resolve({cap:cap, img:extractImage(html), user:extractUser(html)});
-        else next();
-      }, next);
+    var i = 0;
+    function wave(){
+      if(i>=attempts.length) return resolve({fail:diag});
+      var pair = [tryOne(attempts[i])];
+      if(i+1<attempts.length) pair.push(tryOne(attempts[i+1]));
+      i += 2;
+      Promise.all(pair).then(function(res){
+        var hit = res[0] || res[1];
+        if(hit) resolve(hit); else wave();
+      });
     }
-    next();
+    wave();
   });
 }
 /* Télécharge la photo du plat, réduite (~480 px) et stockée avec la recette */
@@ -836,14 +888,20 @@ function runImport(auto){
   var btn = $("impParse");
   btn.textContent = "Je cherche la recette…";
   fetchPost(url).then(function(res){
-    if(!res){
+    if(!res || !res.cap){
       importBusy = false;
       btn.textContent = "Analyser ✨";
+      var d = $("impDiag");
+      if(res && res.fail && res.fail.length){
+        d.hidden = false;
+        d.textContent = "Détail technique (touche pour copier, envoie-le-moi si ça persiste) : "+res.fail.join(" · ");
+      }
       if(caption){ analyse(caption); return; }
       openSheet("importSheet");
-      toast("Instagram a bloqué la lecture 😕 Copie la légende du post et colle-la ici.");
+      toast("Instagram a bloqué la lecture de ce post 😕 Colle sa légende ci-dessous.");
       return;
     }
+    $("impDiag").hidden = true;
     $("impCaption").value = res.cap;
     pendingUser = res.user;
     fetchImageData(res.img).then(function(dataUrl){
@@ -901,6 +959,11 @@ function setupImport(){
     }
   });
   $("impParse").addEventListener("click", function(){ runImport(false); });
+  $("impDiag").addEventListener("click", function(){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText($("impDiag").textContent).then(function(){ toast("Détail copié ✓"); });
+    }
+  });
 }
 
 /* ================= Sheets, overlay, toast ================= */
